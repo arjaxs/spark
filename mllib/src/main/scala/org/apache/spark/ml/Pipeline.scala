@@ -132,7 +132,7 @@ class Pipeline @Since("1.4.0") (
    * @return fitted pipeline
    */
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): PipelineModel = {
+  override def fit(dataset: Dataset[_]): PipelineModel = MLEvents.withFitEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
     // Search for the last estimator.
@@ -201,8 +201,9 @@ object Pipeline extends MLReadable[Pipeline] {
 
     SharedReadWrite.validateStages(instance.getStages)
 
-    override protected def saveImpl(path: String): Unit =
+    override protected def saveImpl(path: String): Unit = MLEvents.withSaveEvent(instance, path) {
       SharedReadWrite.saveImpl(instance, instance.getStages, sc, path)
+    }
   }
 
   private class PipelineReader extends MLReader[Pipeline] {
@@ -301,7 +302,8 @@ class PipelineModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = MLEvents.withTransformEvent(
+      this, dataset) {
     transformSchema(dataset.schema, logging = true)
     stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
   }
@@ -329,14 +331,16 @@ object PipelineModel extends MLReadable[PipelineModel] {
   override def read: MLReader[PipelineModel] = new PipelineModelReader
 
   @Since("1.6.0")
-  override def load(path: String): PipelineModel = super.load(path)
+  override def load(path: String): PipelineModel = MLEvents.withLoadEvent(path) { super.load(path) }
 
   private[PipelineModel] class PipelineModelWriter(instance: PipelineModel) extends MLWriter {
 
     SharedReadWrite.validateStages(instance.stages.asInstanceOf[Array[PipelineStage]])
 
-    override protected def saveImpl(path: String): Unit = SharedReadWrite.saveImpl(instance,
+    override protected def saveImpl(path: String)
+        : Unit = MLEvents.withSaveEvent(instance, path) { SharedReadWrite.saveImpl(instance,
       instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
+    }
   }
 
   private class PipelineModelReader extends MLReader[PipelineModel] {
@@ -353,5 +357,72 @@ object PipelineModel extends MLReadable[PipelineModel] {
       }
       new PipelineModel(uid, transformers)
     }
+  }
+}
+
+private object MLEvents
+    extends Logging with org.apache.spark.util.ListenerBus[MLListener, MLListenEvent] {
+  private val SPARK_ML_SAC_ENABLED = "spark.ml.sac.enabled"
+  private lazy val isSACEnabled = {
+    val enabled = SparkContext.getOrCreate().getConf.getBoolean(SPARK_ML_SAC_ENABLED, false)
+    if (enabled) {
+      this.addListener(new MLListener {
+        override def onEvent(event: MLListenEvent): Unit = {
+          SparkContext.getOrCreate().listenerBus.post(event)
+        }
+      })
+    }
+    enabled
+  }
+
+  def withFitEvent(
+      pipeline: Pipeline, dataset: Dataset[_])(func: => PipelineModel): PipelineModel = {
+    if (isSACEnabled) {
+      val model = func
+      postToAll(CreatePipelineEvent(pipeline, dataset))
+      postToAll(CreateModelEvent(model))
+      model
+    } else {
+      func
+    }
+  }
+
+  def withSaveEvent(pipeline: Pipeline, path: String)(func: => Unit): Unit = if (isSACEnabled) {
+    func
+    postToAll(SavePipelineEvent(pipeline.uid, path))
+  } else {
+    func
+  }
+
+  def withTransformEvent(
+      model: PipelineModel, input: Dataset[_])(func: => DataFrame): DataFrame = {
+    if (isSACEnabled) {
+      val output = func
+      postToAll(TransformEvent(model, input, output))
+      output
+    } else {
+      func
+    }
+  }
+
+  def withLoadEvent(path: String)(func: => PipelineModel): PipelineModel = if (isSACEnabled) {
+    val pipeline = func
+    postToAll(LoadModelEvent(path, pipeline))
+    pipeline
+  } else {
+    func
+  }
+
+  def withSaveEvent(pipeline: PipelineModel, path: String)(func: => Unit): Unit = {
+    if (isSACEnabled) {
+      func
+      postToAll(SaveModelEvent(pipeline.uid, path))
+    } else {
+      func
+    }
+  }
+
+  override protected def doPostEvent(listener: MLListener, event: MLListenEvent): Unit = {
+    listener.onEvent(event)
   }
 }
