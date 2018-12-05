@@ -42,10 +42,22 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   @Since("2.0.0")
   @varargs
   def fit(dataset: Dataset[_], firstParamPair: ParamPair[_], otherParamPairs: ParamPair[_]*): M = {
+    MLEvents.withFitEvent(this, dataset) {
+      fitImpl(dataset, firstParamPair, otherParamPairs: _*)
+    }
+  }
+
+  /**
+   * `fit()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual fiting a model to the input data..
+   */
+  @Since("3.0.0")
+  protected def fitImpl(
+      dataset: Dataset[_], firstParamPair: ParamPair[_], otherParamPairs: ParamPair[_]*): M = {
     val map = new ParamMap()
       .put(firstParamPair)
       .put(otherParamPairs: _*)
-    fit(dataset, map)
+    fitImpl(dataset, map)
   }
 
   /**
@@ -58,14 +70,37 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    */
   @Since("2.0.0")
   def fit(dataset: Dataset[_], paramMap: ParamMap): M = {
-    copy(paramMap).fit(dataset)
+    MLEvents.withFitEvent(this, dataset) {
+      fitImpl(dataset, paramMap)
+    }
+  }
+
+  /**
+   * `fit()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual fiting a model to the input data.
+   */
+  @Since("3.0.0")
+  protected def fitImpl(dataset: Dataset[_], paramMap: ParamMap): M = {
+    copy(paramMap).fitImpl(dataset)
   }
 
   /**
    * Fits a model to the input data.
    */
   @Since("2.0.0")
-  def fit(dataset: Dataset[_]): M
+  def fit(dataset: Dataset[_]): M = MLEvents.withFitEvent(this, dataset) {
+    fitImpl(dataset)
+  }
+
+  /**
+   * `fit()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual fiting a model to the input data.
+   */
+  @Since("3.0.0")
+  protected def fitImpl(dataset: Dataset[_]): M = {
+    // Keep this default body for backward compatibility.
+    throw new UnsupportedOperationException("fitImpl is not implemented.")
+  }
 
   /**
    * Fits multiple models to the input data with multiple sets of parameters.
@@ -79,7 +114,20 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    */
   @Since("2.0.0")
   def fit(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
-    paramMaps.map(fit(dataset, _))
+    paramMaps.map { paramMap =>
+      MLEvents.withFitEvent(this, dataset) {
+        fitImpl(dataset, paramMap)
+      }
+    }
+  }
+
+  /**
+   * `fit()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual fiting a model to the input data..
+   */
+  @Since("3.0.0")
+  protected def fitImpl(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
+    paramMaps.map(fitImpl(dataset, _))
   }
 
   override def copy(extra: ParamMap): Estimator[M]

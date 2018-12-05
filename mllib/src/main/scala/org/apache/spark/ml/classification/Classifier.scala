@@ -156,7 +156,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * @param dataset input dataset
    * @return transformed dataset
    */
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
     // Output selected columns only.
