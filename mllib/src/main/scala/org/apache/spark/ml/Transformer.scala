@@ -46,11 +46,24 @@ abstract class Transformer extends PipelineStage {
   def transform(
       dataset: Dataset[_],
       firstParamPair: ParamPair[_],
+      otherParamPairs: ParamPair[_]*): DataFrame = MLEvents.withTransformEvent(this, dataset) {
+    transformImpl(dataset, firstParamPair, otherParamPairs: _*)
+  }
+
+  /**
+   * `transform()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual transformation.
+   */
+  @Since("3.0.0")
+  @varargs
+  protected def transformImpl(
+      dataset: Dataset[_],
+      firstParamPair: ParamPair[_],
       otherParamPairs: ParamPair[_]*): DataFrame = {
     val map = new ParamMap()
       .put(firstParamPair)
       .put(otherParamPairs: _*)
-    transform(dataset, map)
+    transformImpl(dataset, map)
   }
 
   /**
@@ -61,14 +74,37 @@ abstract class Transformer extends PipelineStage {
    */
   @Since("2.0.0")
   def transform(dataset: Dataset[_], paramMap: ParamMap): DataFrame = {
-    this.copy(paramMap).transform(dataset)
+    MLEvents.withTransformEvent(this, dataset) {
+      transformImpl(dataset, paramMap)
+    }
+  }
+
+  /**
+   * `transform()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual transformation.
+   */
+  @Since("3.0.0")
+  protected def transformImpl(dataset: Dataset[_], paramMap: ParamMap): DataFrame = {
+    this.copy(paramMap).transformImpl(dataset)
   }
 
   /**
    * Transforms the input dataset.
    */
   @Since("2.0.0")
-  def transform(dataset: Dataset[_]): DataFrame
+  def transform(dataset: Dataset[_]): DataFrame = MLEvents.withTransformEvent(this, dataset) {
+    transformImpl(dataset)
+  }
+
+  /**
+   * `transform()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual transformation.
+   */
+  @Since("3.0.0")
+  protected def transformImpl(dataset: Dataset[_]): DataFrame = {
+    // Keep this default body for backward compatibility.
+    throw new UnsupportedOperationException("transformImpl is not implemented.")
+  }
 
   override def copy(extra: ParamMap): Transformer
 }
@@ -116,7 +152,7 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
     StructType(outputFields)
   }
 
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val transformUDF = udf(this.createTransformFunc, outputDataType)
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))

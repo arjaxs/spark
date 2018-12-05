@@ -100,7 +100,7 @@ abstract class ProbabilisticClassificationModel[
    * @param dataset input dataset
    * @return transformed dataset
    */
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
