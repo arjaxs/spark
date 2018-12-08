@@ -47,23 +47,10 @@ abstract class Transformer extends PipelineStage {
       dataset: Dataset[_],
       firstParamPair: ParamPair[_],
       otherParamPairs: ParamPair[_]*): DataFrame = MLEvents.withTransformEvent(this, dataset) {
-    transformImpl(dataset, firstParamPair, otherParamPairs: _*)
-  }
-
-  /**
-   * `transform()` handles events and then calls this method. Subclasses should override this
-   * method to implement the actual transformation.
-   */
-  @Since("3.0.0")
-  @varargs
-  protected def transformImpl(
-      dataset: Dataset[_],
-      firstParamPair: ParamPair[_],
-      otherParamPairs: ParamPair[_]*): DataFrame = {
     val map = new ParamMap()
       .put(firstParamPair)
       .put(otherParamPairs: _*)
-    transformImpl(dataset, map)
+    transform(dataset, map)
   }
 
   /**
@@ -74,18 +61,7 @@ abstract class Transformer extends PipelineStage {
    */
   @Since("2.0.0")
   def transform(dataset: Dataset[_], paramMap: ParamMap): DataFrame = {
-    MLEvents.withTransformEvent(this, dataset) {
-      transformImpl(dataset, paramMap)
-    }
-  }
-
-  /**
-   * `transform()` handles events and then calls this method. Subclasses should override this
-   * method to implement the actual transformation.
-   */
-  @Since("3.0.0")
-  protected def transformImpl(dataset: Dataset[_], paramMap: ParamMap): DataFrame = {
-    this.copy(paramMap).transformImpl(dataset)
+    this.copy(paramMap).transform(dataset)
   }
 
   /**

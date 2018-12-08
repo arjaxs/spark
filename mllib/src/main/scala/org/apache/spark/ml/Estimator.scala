@@ -42,22 +42,10 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   @Since("2.0.0")
   @varargs
   def fit(dataset: Dataset[_], firstParamPair: ParamPair[_], otherParamPairs: ParamPair[_]*): M = {
-    MLEvents.withFitEvent(this, dataset) {
-      fitImpl(dataset, firstParamPair, otherParamPairs: _*)
-    }
-  }
-
-  /**
-   * `fit()` handles events and then calls this method. Subclasses should override this
-   * method to implement the actual fiting a model to the input data..
-   */
-  @Since("3.0.0")
-  protected def fitImpl(
-      dataset: Dataset[_], firstParamPair: ParamPair[_], otherParamPairs: ParamPair[_]*): M = {
     val map = new ParamMap()
       .put(firstParamPair)
       .put(otherParamPairs: _*)
-    fitImpl(dataset, map)
+    fit(dataset, map)
   }
 
   /**
@@ -70,18 +58,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    */
   @Since("2.0.0")
   def fit(dataset: Dataset[_], paramMap: ParamMap): M = {
-    MLEvents.withFitEvent(this, dataset) {
-      fitImpl(dataset, paramMap)
-    }
-  }
-
-  /**
-   * `fit()` handles events and then calls this method. Subclasses should override this
-   * method to implement the actual fiting a model to the input data.
-   */
-  @Since("3.0.0")
-  protected def fitImpl(dataset: Dataset[_], paramMap: ParamMap): M = {
-    copy(paramMap).fitImpl(dataset)
+    copy(paramMap).fit(dataset)
   }
 
   /**
@@ -114,20 +91,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    */
   @Since("2.0.0")
   def fit(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
-    paramMaps.map { paramMap =>
-      MLEvents.withFitEvent(this, dataset) {
-        fitImpl(dataset, paramMap)
-      }
-    }
-  }
-
-  /**
-   * `fit()` handles events and then calls this method. Subclasses should override this
-   * method to implement the actual fiting a model to the input data..
-   */
-  @Since("3.0.0")
-  protected def fitImpl(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
-    paramMaps.map(fitImpl(dataset, _))
+    paramMaps.map(fit(dataset, _))
   }
 
   override def copy(extra: ParamMap): Estimator[M]
