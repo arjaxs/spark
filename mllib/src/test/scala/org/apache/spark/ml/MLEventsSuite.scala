@@ -17,10 +17,9 @@
 
 package org.apache.spark.ml
 
-import java.io.File
-
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path
 import org.mockito.Matchers.{any, eq => meq}
@@ -29,69 +28,57 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar.mock
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
-import org.apache.spark.util.Utils
+
 
 
 class MLEventsSuite
     extends SparkFunSuite
     with BeforeAndAfterEach
     with DefaultReadWriteTest
+    with MLlibTestSparkContext
     with Eventually {
 
-  private var spark: SparkSession = _
-  private var sc: SparkContext = _
-  private var checkpointDir: String = _
-  private var listener: SparkListener = _
   private val dirName: String = "pipeline"
   private val events = mutable.ArrayBuffer.empty[MLEvent]
+  private val listener: SparkListener = new SparkListener {
+    override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+      case e: FitStart[_] => events.append(e)
+      case e: FitEnd[_] => events.append(e)
+      case e: TransformStart => events.append(e)
+      case e: TransformEnd => events.append(e)
+      case e: SaveInstanceStart if e.path.endsWith(dirName) => events.append(e)
+      case e: SaveInstanceEnd if e.path.endsWith(dirName) => events.append(e)
+      case _ =>
+    }
+  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sc = new SparkContext("local[2]", "SparkListenerSuite")
-    listener = new SparkListener {
-      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-        case e: FitStart[_] => events.append(e)
-        case e: FitEnd[_] => events.append(e)
-        case e: TransformStart => events.append(e)
-        case e: TransformEnd => events.append(e)
-        case e: SaveInstanceStart if e.path.endsWith(dirName) => events.append(e)
-        case e: SaveInstanceEnd if e.path.endsWith(dirName) => events.append(e)
-        case _ =>
-      }
+    spark.sparkContext.addSparkListener(listener)
+  }
+
+  override def afterEach(): Unit = {
+    try {
+      events.clear()
+    } finally {
+      super.afterEach()
     }
-    sc.addSparkListener(listener)
-
-    spark = SparkSession.builder()
-      .sparkContext(sc)
-      .getOrCreate()
-
-    checkpointDir = Utils.createDirectory(tempDir.getCanonicalPath, "checkpoints").toString
-    sc.setCheckpointDir(checkpointDir)
   }
 
   override def afterAll(): Unit = {
     try {
-      sc.removeSparkListener(listener)
-      Utils.deleteRecursively(new File(checkpointDir))
-      SparkSession.clearActiveSession()
       if (spark != null) {
-        spark.stop()
+        spark.sparkContext.removeSparkListener(listener)
       }
-      spark = null
     } finally {
       super.afterAll()
     }
-  }
-
-  override def afterEach(): Unit = try {
-    events.clear()
-  } finally {
-    super.afterEach()
   }
 
   abstract class MyModel extends Model[MyModel]

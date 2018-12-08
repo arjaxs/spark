@@ -76,7 +76,7 @@ case class SaveInstanceEnd(writer: MLWriter, path: String) extends MLEvent
 
 
 private[ml] object MLEvents {
-  private lazy val listenerBus = SparkContext.getOrCreate().listenerBus
+  private def listenerBus = SparkContext.getOrCreate().listenerBus
 
   def withFitEvent[M <: Model[M]](
       estimator: Estimator[M], dataset: Dataset[_])(func: => M): M = {
