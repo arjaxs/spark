@@ -30,17 +30,14 @@ import org.scalatest.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 
 
-
 class MLEventsSuite
     extends SparkFunSuite
     with BeforeAndAfterEach
-    with DefaultReadWriteTest
     with MLlibTestSparkContext
     with Eventually {
 
