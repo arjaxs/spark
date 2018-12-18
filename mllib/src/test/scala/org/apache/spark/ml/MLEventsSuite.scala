@@ -81,19 +81,17 @@ class MLEventsSuite
   abstract class MyModel extends Model[MyModel]
 
   test("pipeline fit events") {
-    val estimator0 = mock[Estimator[MyModel]]
-    val model0 = mock[MyModel]
+    val estimator1 = mock[Estimator[MyModel]]
+    val model1 = mock[MyModel]
     val transformer1 = mock[Transformer]
     val estimator2 = mock[Estimator[MyModel]]
     val model2 = mock[MyModel]
-    val transformer3 = mock[Transformer]
 
-    when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
-    when(model0.copy(any[ParamMap])).thenReturn(model0)
+    when(estimator1.copy(any[ParamMap])).thenReturn(estimator1)
+    when(model1.copy(any[ParamMap])).thenReturn(model1)
     when(transformer1.copy(any[ParamMap])).thenReturn(transformer1)
     when(estimator2.copy(any[ParamMap])).thenReturn(estimator2)
     when(model2.copy(any[ParamMap])).thenReturn(model2)
-    when(transformer3.copy(any[ParamMap])).thenReturn(transformer3)
 
     val dataset0 = mock[DataFrame]
     val dataset1 = mock[DataFrame]
@@ -107,21 +105,26 @@ class MLEventsSuite
     when(dataset3.toDF).thenReturn(dataset3)
     when(dataset4.toDF).thenReturn(dataset4)
 
-    when(estimator0.fit(meq(dataset0))).thenReturn(model0)
-    when(model0.transform(meq(dataset0))).thenReturn(dataset1)
-    when(model0.parent).thenReturn(estimator0)
+    when(estimator1.fit(meq(dataset0))).thenReturn(model1)
+    when(model1.transform(meq(dataset0))).thenReturn(dataset1)
+    when(model1.parent).thenReturn(estimator1)
     when(transformer1.transform(meq(dataset1))).thenReturn(dataset2)
     when(estimator2.fit(meq(dataset2))).thenReturn(model2)
-    when(model2.transform(meq(dataset2))).thenReturn(dataset3)
-    when(model2.parent).thenReturn(estimator2)
-    when(transformer3.transform(meq(dataset3))).thenReturn(dataset4)
 
+    assert(events.isEmpty)
     val pipeline = new Pipeline()
-      .setStages(Array(estimator0, transformer1, estimator2, transformer3))
+      .setStages(Array(estimator1, transformer1, estimator2))
     val pipelineModel = pipeline.fit(dataset0)
-
     val expected =
       FitStart(pipeline, dataset0) ::
+      FitStart(estimator1, dataset0) ::
+      FitEnd(estimator1, model1) ::
+      TransformStart(model1, dataset0) ::
+      TransformEnd(model1, dataset1) ::
+      TransformStart(transformer1, dataset1) ::
+      TransformEnd(transformer1, dataset2) ::
+      FitStart(estimator2, dataset2) ::
+      FitEnd(estimator2, model2) ::
       FitEnd(pipeline, pipelineModel) :: Nil
     eventually(timeout(10 seconds), interval(1 second)) {
       assert(expected === events)
