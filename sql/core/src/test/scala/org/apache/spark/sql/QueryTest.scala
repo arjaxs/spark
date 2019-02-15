@@ -341,14 +341,9 @@ object QueryTest {
     case (a: Array[_], b: Array[_]) =>
       a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
     case (a: Map[_, _], b: Map[_, _]) =>
-      if (a.size == b.size && a.size > 0) {
-        a.keys.map { aKey =>
-          b.keys.find(bKey => compare(aKey, bKey))
-            .map(bKey => compare(a(aKey), b(bKey)))
-            .getOrElse(false)
-        }.reduce(_ && _)
-      } else {
-        a.size == b.size
+      a.size == b.size && a.keys.forall { aKey =>
+        val maybeBKey = b.keys.find(bKey => compare(aKey, bKey))
+        maybeBKey.isDefined && compare(a(aKey), b(maybeBKey.get))
       }
     case (a: Iterable[_], b: Iterable[_]) =>
       a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
